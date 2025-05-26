@@ -101,19 +101,20 @@ def create_video(
     output_path: str,
     fps: float = 30,
     output_video_quality: int = 35,
-    output_video_encoder: str = "libx264",
+    output_video_encoder: str = "h264_nvenc",
 ) -> bool:
     """
     合成视频文件。
 
     该函数使用FFmpeg命令将临时目录中的帧与目标音频合并为最终的视频文件。
+    优化为使用NVIDIA GPU加速。
 
     参数:
     - target_path: 目标文件路径，用于获取临时目录路径。
     - output_path: 输出视频文件的路径。
     - fps: 视频的帧率，默认为30帧每秒。
     - output_video_quality: 输出视频的质量，0-51的整数，其中0是无损压缩，51是最大压缩。
-    - output_video_encoder: 输出视频的编码器，默认使用libx264。
+    - output_video_encoder: 输出视频的编码器，默认使用h264_nvenc。
 
     返回:
     - bool: 表示FFmpeg命令执行是否成功的布尔值。
@@ -122,30 +123,34 @@ def create_video(
     output_video_quality = (output_video_quality + 1) * 51 // 100
 
     commands = [
-        "-hwaccel",
-        "auto",
-        "-r",
-        str(fps),
-        "-i",
-        os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
-        "-i",
-        target_path,
-        "-c:v",
-        output_video_encoder,
-        "-c:a",
-        "aac",
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-pix_fmt",
-        "yuv420p",
+        "-hwaccel", "cuda",
+        "-hwaccel_output_format", "cuda",
+        "-extra_hw_frames", "3",
+        "-r", str(fps),
+        "-i", os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
+        "-i", target_path,
+        "-c:v", output_video_encoder,
+        "-c:a", "aac",
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-pix_fmt", "yuv420p",
     ]
 
-    if output_video_encoder in ["libx264", "libx265", "libvpx"]:
-        commands.extend(["-crf", str(output_video_quality)])
     if output_video_encoder in ["h264_nvenc", "hevc_nvenc"]:
-        commands.extend(["-cq", str(output_video_quality)])
+        commands.extend([
+            "-preset", "p7",
+            "-tune", "hq",
+            "-rc", "vbr",
+            "-cq", str(output_video_quality),
+            "-b:v", "0",
+            "-spatial-aq", "1",
+            "-temporal-aq", "1",
+            "-rc-lookahead", "20",
+            "-gpu", "any",
+            "-no-scenecut", "1"
+        ])
+    else:
+        commands.extend(["-crf", str(output_video_quality)])
 
     commands.extend(["-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"])
     commands.extend(["-y", output_path])
