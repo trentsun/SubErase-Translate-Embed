@@ -99,7 +99,7 @@ def extract_mask(
     frame_len: int,
     max_frame_length: int,
     min_frame_length: int,
-    mask_expand: int = 20,
+    mask_expand: int = 30,
 ):
     """
     根据掩膜结果提取连续帧的路径、图像和掩膜信息。
@@ -112,6 +112,9 @@ def extract_mask(
     :param mask_expand: 掩膜外扩的像素数。
     :return: 一个包含三个列表的元组，分别包含每组连续帧的路径、图像和掩膜信息。
     """
+    def calculate_dynamic_mask_expand(box_height):
+        # 根据字幕框高度动态计算扩展值
+        return max(mask_expand, int(box_height * 0.5))
 
     def add_frames():
         end = frame_number
@@ -122,7 +125,8 @@ def extract_mask(
                 break
             frame_path_ = os.path.join(os.path.split(frame_path)[0], "%04d.png" % i)
             image_ = load_img(frame_path_)
-            mask_ = Image.fromarray(np.zeros(image_.size[::-1], dtype="uint8"))
+            # 使用相邻帧的掩码，而不是空掩码
+            mask_ = masks[-1] if masks else Image.fromarray(np.zeros(image_.size[::-1], dtype="uint8"))
             paths.append(frame_path_)
             frames.append(image_)
             masks.append(mask_)
@@ -141,16 +145,22 @@ def extract_mask(
         mask = np.zeros(image.size[::-1], dtype="uint8")
         xmin, ymin, xmax, ymax = value["box"]
         xwidth = min(xmin, width_ - xmax)
+        
+        # 计算动态扩展值
+        box_height = ymax - ymin
+        dynamic_mask_expand = calculate_dynamic_mask_expand(box_height)
+        
         cv2.rectangle(
             mask,
-            (max(0, xwidth - mask_expand), ymin - mask_expand),
-            (min(width_ - xwidth + mask_expand, width_ - 1), ymax + mask_expand),
+            (max(0, xwidth - dynamic_mask_expand), ymin - dynamic_mask_expand),
+            (min(width_ - xwidth + dynamic_mask_expand, width_ - 1), ymax + dynamic_mask_expand),
             (255, 255, 255),
             thickness=-1,
         )
         mask = Image.fromarray(mask)
 
-        if frame_number - frame_number_pre < fps * 2 and len(paths) < max_frame_length:
+        # 降低帧间隔判断的严格性
+        if frame_number - frame_number_pre < fps * 3 and len(paths) < max_frame_length:  # 从 fps * 2 改为 fps * 3
             paths.append(frame_path)
             frames.append(image)
             masks.append(mask)

@@ -63,19 +63,19 @@ def main():
     output_path = f"{file_name}_output{ext}"
     create_video(args.video, output_path, fps)
 
-    # 翻译字幕
-    update_status("Translate: translating subtitles...")
-    srt_lang_path = translate_subtitles(srt_path, args.language)
+    # # 翻译字幕
+    # update_status("Translate: translating subtitles...")
+    # srt_lang_path = translate_subtitles(srt_path, args.language)
 
-    # 将翻译后的字幕嵌入视频
-    update_status("Embed: embedding subtitles...")
-    output_file = f"{file_name}_{args.language}{ext}"
-    embed_subtitles(output_path, srt_lang_path, y_center, output_file, config)
+    # # 将翻译后的字幕嵌入视频
+    # update_status("Embed: embedding subtitles...")
+    # output_file = f"{file_name}_{args.language}{ext}"
+    # embed_subtitles(output_path, srt_lang_path, y_center, output_file, config)
 
-    if args.delete:
-        if os.path.exists(file_name):
-            shutil.rmtree(file_name)
-            update_status("Temporary request directory {} deleted".format(file_name))
+    # if args.delete:
+    #     if os.path.exists(file_name):
+    #         shutil.rmtree(file_name)
+    #         update_status("Temporary request directory {} deleted".format(file_name))
 
     update_status(f"Done! {args.video}")
 
