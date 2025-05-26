@@ -105,34 +105,31 @@ def create_video(
     output_path: str,
     fps: float = 30,
     output_video_quality: int = 35,
-    output_video_encoder: str = "h264_nvenc",
+    output_video_encoder: str = "libx264",
 ) -> bool:
     """
     合成视频文件。
 
     该函数使用FFmpeg命令将临时目录中的帧与目标音频合并为最终的视频文件。
-    优化为使用NVIDIA GPU加速。
 
     参数:
     - target_path: 目标文件路径，用于获取临时目录路径。
     - output_path: 输出视频文件的路径。
     - fps: 视频的帧率，默认为30帧每秒。
-    - output_video_quality: 输出视频的质量，0-51的整数，其中0是无损压缩，51是最大压缩。
-    - output_video_encoder: 输出视频的编码器，默认使用h264_nvenc。
-
-    返回:
-    - bool: 表示FFmpeg命令执行是否成功的布尔值。
+    - output_video_quality: 输出视频的质量，0-51的整数。
+    - output_video_encoder: 输出视频的编码器。
     """
     temp_directory_path = get_temp_directory_path(target_path)
 
     commands = [
         "-y",
-        "-hwaccel", "cuvid",
+        "-thread_queue_size", "512",
         "-i", os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
         "-i", target_path,
         "-c:v", output_video_encoder,
-        "-preset", "slow",
-        "-b:v", "5M",
+        "-preset", "medium",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
         "-c:a", "copy",
         output_path
     ]
