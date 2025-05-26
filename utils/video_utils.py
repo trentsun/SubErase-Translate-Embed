@@ -126,14 +126,14 @@ def create_video(
     temp_directory_path = get_temp_directory_path(target_path)
 
     commands = [
-        "-y",  # 移到开头以避免输入文件冲突
-        "-hwaccel", "cuda",
+        "-y",
+        "-hwaccel", "cuvid",
         "-i", os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
         "-i", target_path,
         "-c:v", output_video_encoder,
-        "-preset", "slow",  # 使用最基本的预设
+        "-preset", "slow",
         "-b:v", "5M",
-        "-c:a", "copy",    # 直接复制音频流
+        "-c:a", "copy",
         output_path
     ]
 
