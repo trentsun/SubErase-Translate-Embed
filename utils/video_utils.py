@@ -125,7 +125,6 @@ def create_video(
     commands = [
         "-hwaccel", "cuda",
         "-hwaccel_output_format", "cuda",
-        "-extra_hw_frames", "3",
         "-r", str(fps),
         "-i", os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
         "-i", target_path,
@@ -138,16 +137,13 @@ def create_video(
 
     if output_video_encoder in ["h264_nvenc", "hevc_nvenc"]:
         commands.extend([
-            "-preset", "p7",
-            "-tune", "hq",
-            "-rc", "vbr",
+            "-preset", "p4",
+            "-tune", "ll",
+            "-rc", "vbr_hq",
             "-cq", str(output_video_quality),
-            "-b:v", "0",
+            "-b:v", "5M",
+            "-maxrate", "10M",
             "-spatial-aq", "1",
-            "-temporal-aq", "1",
-            "-rc-lookahead", "20",
-            "-gpu", "any",
-            "-no-scenecut", "1"
         ])
     else:
         commands.extend(["-crf", str(output_video_quality)])
