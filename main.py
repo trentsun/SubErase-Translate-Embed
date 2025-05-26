@@ -61,6 +61,8 @@ def main():
     # update_status("Erase: removing subtitles...")
     # remove_subtitles(ocr_result, fps, len(frame_paths), config)
     output_path = f"{file_name}_output{ext}"
+    print("output_path")
+    print(output_path)
     create_video(args.video, output_path, fps)
 
     # # 翻译字幕
