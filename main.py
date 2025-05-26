@@ -1,6 +1,10 @@
 import argparse
 import os
 import shutil
+import sys
+
+# 添加 STTN 到 Python 路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.config import load_config
 from modules.embed import embed_subtitles
