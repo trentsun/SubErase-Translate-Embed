@@ -17,15 +17,19 @@ def run_ffmpeg(args: List[str]) -> bool:
     返回:
         bool: 如果ffmpeg命令成功执行，则返回True，否则返回False。
     """
-    commands = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    commands = ["ffmpeg", "-hide_banner"]  # 移除 -loglevel error 以查看详细错误信息
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
-        return True
+        result = subprocess.run(commands, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        if result.returncode != 0:
+            print("FFmpeg error output:")
+            print(result.stderr.decode())
+            print("FFmpeg stdout output:")
+            print(result.stdout.decode())
+        return result.returncode == 0
     except Exception as e:
-        print(str(e))
-        pass
-    return False
+        print(f"FFmpeg execution error: {str(e)}")
+        return False
 
 
 def detect_fps(target_path: str) -> float:
@@ -120,32 +124,18 @@ def create_video(
     - bool: 表示FFmpeg命令执行是否成功的布尔值。
     """
     temp_directory_path = get_temp_directory_path(target_path)
-    output_video_quality = (output_video_quality + 1) * 51 // 100
 
     commands = [
+        "-y",  # 移到开头以避免输入文件冲突
         "-hwaccel", "cuda",
-        "-r", str(fps),
         "-i", os.path.join(temp_directory_path, "%04d." + TEMP_FRAME_FORMAT),
         "-i", target_path,
         "-c:v", output_video_encoder,
-        "-c:a", "aac",
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-pix_fmt", "yuv420p",
+        "-preset", "slow",  # 使用最基本的预设
+        "-b:v", "5M",
+        "-c:a", "copy",    # 直接复制音频流
+        output_path
     ]
-
-    if output_video_encoder in ["h264_nvenc", "hevc_nvenc"]:
-        commands.extend([
-            "-preset", "medium",      # 使用标准预设
-            "-b:v", "5M",            # 设置视频比特率
-            "-maxrate", "10M",       # 最大比特率
-            "-bufsize", "10M",       # 缓冲区大小
-        ])
-    else:
-        commands.extend(["-crf", str(output_video_quality)])
-
-    commands.extend(["-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"])
-    commands.extend(["-y", output_path])
 
     return run_ffmpeg(commands)
 
