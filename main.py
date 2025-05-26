@@ -46,7 +46,7 @@ def main():
 
     # 提取视频帧
     update_status(f"Source: extracting frames with {fps} FPS...")
-    extract_frames(args.video, fps)
+    # extract_frames(args.video, fps)
     temp_directory_path = get_temp_directory_path(args.video)
     frame_paths = get_temp_frame_paths(temp_directory_path)
 
