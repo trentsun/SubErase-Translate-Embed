@@ -41,6 +41,25 @@ def extract_subtitles(frame_paths: List[str], config: dict, fps: float):
     ocr_result, center = check_ocr_result(ocr_result, config, fps, frame_paths[0])
     save_ocr_result(ocr_result, f"{file_name}_ocr_check.json")
 
+    # 添加连续性检查
+    min_subtitle_frames = int(fps * 0.5)  # 假设最短字幕持续0.5秒
+    
+    # 检查孤立的未检测帧
+    for i in range(len(frame_paths)):
+        if i not in ocr_result:
+            # 检查前后是否都有检测结果
+            prev_detected = any(i - j in ocr_result for j in range(1, min_subtitle_frames))
+            next_detected = any(i + j in ocr_result for j in range(1, min_subtitle_frames))
+            
+            if prev_detected and next_detected:
+                # 如果前后都有检测结果，则使用插值
+                prev_frame = max(k for k in ocr_result.keys() if k < i)
+                next_frame = min(k for k in ocr_result.keys() if k > i)
+                ocr_result[i] = {
+                    'text': ocr_result[prev_frame]['text'],
+                    'box': ocr_result[prev_frame]['box']  # 或者使用两帧box的平均值
+                }
+
     return ocr_result, center
 
 

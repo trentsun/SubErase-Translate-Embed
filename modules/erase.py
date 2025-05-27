@@ -192,7 +192,7 @@ def extract_mask(
     return paths_list, frames_list, masks_list
 
 
-def remove_subtitles(ocr_result: dict, fps: float, frame_len: int, config: dict):
+def remove_subtitles(ocr_result, fps, total_frames, config):
     """
     移除视频中的字幕。
 
@@ -205,10 +205,25 @@ def remove_subtitles(ocr_result: dict, fps: float, frame_len: int, config: dict)
     返回值:
     无。
     """
+    # 扩大擦除区域
+    def expand_box(box, margin=10):
+        x1, y1, x2, y2 = box
+        return [
+            max(0, x1 - margin),
+            max(0, y1 - margin),
+            x2 + margin,
+            y2 + margin
+        ]
+    
+    # 对检测到的区域进行扩展处理
+    for frame_idx in ocr_result:
+        if 'box' in ocr_result[frame_idx]:
+            ocr_result[frame_idx]['box'] = expand_box(ocr_result[frame_idx]['box'])
+    
     paths_list, frames_list, masks_list = extract_mask(
         ocr_result,
         fps,
-        frame_len,
+        total_frames,
         config["erase"]["max_frame_length"],
         config["erase"]["min_frame_length"],
         config["erase"]["mask_expand"],

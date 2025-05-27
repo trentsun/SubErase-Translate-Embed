@@ -28,6 +28,9 @@ def get_subtitles(ocr_result: dict, config: dict, fps: float, file_name: str):
     返回:
     - None
     """
+    min_duration = 0.5  # 最短字幕持续时间（秒）
+    max_duration = 10.0  # 最长字幕持续时间（秒）
+    
     frame_number_pre = 0
     text_pre = ""
     subtitles = []
@@ -78,5 +81,17 @@ def get_subtitles(ocr_result: dict, config: dict, fps: float, file_name: str):
     srt_path = f"{file_name}_zh_ocr.srt"
     with open(srt_path, "w") as file:
         file.write(subtitle_text)
+
+    # 检查字幕持续时间
+    if subtitles:
+        for i in range(len(subtitles)):
+            duration = (subtitles[i]['end'] - subtitles[i]['start']) / fps
+            if duration < min_duration:
+                # 合并过短的字幕
+                continue
+            if duration > max_duration:
+                # 分割过长的字幕
+                # 处理逻辑...
+                pass
 
     return srt_path
