@@ -210,3 +210,225 @@ def remove_subtitles(ocr_result, fps, total_frames, config):
         config["erase"]["ckpt_p"],
     )
     inpaint_imag(results)
+
+
+def debug_subtitle_erase(
+    test_frames: list,
+    ocr_result: dict,
+    fps: float,
+    config: dict,
+    output_dir: str = "debug_output"
+):
+    """
+    调试字幕擦除流程
+
+    参数:
+    test_frames: list - 要测试的帧号列表，例如[473, 474, ..., 498]
+    ocr_result: dict - OCR检测结果
+    fps: float - 视频帧率
+    config: dict - 配置信息
+    output_dir: str - 调试输出目录
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    def save_debug_image(img, stage, frame_num):
+        """保存调试图像"""
+        debug_path = os.path.join(output_dir, f"{frame_num:04d}_{stage}.png")
+        if isinstance(img, np.ndarray):
+            cv2.imwrite(debug_path, img)
+        elif isinstance(img, Image.Image):
+            img.save(debug_path)
+            
+    def visualize_box(image, box, color=(0, 255, 0), thickness=2):
+        """在图像上可视化边界框"""
+        xmin, ymin, xmax, ymax = box
+        cv2.rectangle(image, (xmin, ymin), (xmax, ymax), color, thickness)
+        return image
+
+    # 1. 检查原始图像和OCR检测框
+    print("1. 检查OCR检测结果...")
+    for frame_num in test_frames:
+        frame_path = f"3/{frame_num:04d}.png"
+        if frame_path + ",0" not in ocr_result:
+            print(f"警告: 帧 {frame_num} 未找到OCR结果")
+            continue
+            
+        # 读取原始图像
+        original_img = cv2.imread(frame_path)
+        if original_img is None:
+            print(f"错误: 无法读取帧 {frame_num}")
+            continue
+            
+        # 绘制OCR检测框
+        box = ocr_result[frame_path + ",0"]["box"]
+        vis_img = original_img.copy()
+        vis_img = visualize_box(vis_img, box)
+        save_debug_image(vis_img, "1_ocr_box", frame_num)
+
+    # 2. 检查mask生成
+    print("\n2. 检查mask生成...")
+    mask_expand = config["erase"]["mask_expand"]
+    for frame_num in test_frames:
+        frame_path = f"3/{frame_num:04d}.png"
+        if frame_path + ",0" not in ocr_result:
+            continue
+            
+        # 读取图像
+        image = Image.open(frame_path)
+        width_, height_ = image.size
+        
+        # 生成mask
+        mask = np.zeros((height_, width_), dtype="uint8")
+        box = ocr_result[frame_path + ",0"]["box"]
+        xmin, ymin, xmax, ymax = box
+        
+        # 计算动态扩展值
+        box_height = ymax - ymin
+        dynamic_mask_expand = max(mask_expand, int(box_height * 0.5))
+        
+        # 绘制mask
+        cv2.rectangle(
+            mask,
+            (max(0, xmin - dynamic_mask_expand), max(0, ymin - dynamic_mask_expand)),
+            (min(xmax + dynamic_mask_expand, width_ - 1), min(ymax + dynamic_mask_expand, height_ - 1)),
+            255,
+            thickness=-1,
+        )
+        
+        # 保存mask可视化结果
+        save_debug_image(mask, "2_mask", frame_num)
+        
+        # 将mask应用到原图上以检查覆盖区域
+        original_img = cv2.imread(frame_path)
+        masked_img = original_img.copy()
+        masked_img[mask > 0] = [0, 0, 255]  # 用红色显示mask区域
+        save_debug_image(masked_img, "2_masked", frame_num)
+
+    # 3. 检查STTN输入
+    print("\n3. 检查STTN模型输入...")
+    w, h = 432, 240  # STTN的处理尺寸
+    for frame_num in test_frames:
+        frame_path = f"3/{frame_num:04d}.png"
+        if frame_path + ",0" not in ocr_result:
+            continue
+            
+        # 读取并缩放图像
+        image = Image.open(frame_path)
+        resized_img = image.resize((w, h))
+        save_debug_image(resized_img, "3_resized", frame_num)
+        
+        # 生成缩放后的mask
+        mask = Image.fromarray(np.zeros(image.size[::-1], dtype="uint8"))
+        box = ocr_result[frame_path + ",0"]["box"]
+        xmin, ymin, xmax, ymax = box
+        box_height = ymax - ymin
+        dynamic_mask_expand = max(mask_expand, int(box_height * 0.5))
+        
+        mask_np = np.array(mask)
+        cv2.rectangle(
+            mask_np,
+            (max(0, xmin - dynamic_mask_expand), max(0, ymin - dynamic_mask_expand)),
+            (min(xmax + dynamic_mask_expand, width_ - 1), min(ymax + dynamic_mask_expand, height_ - 1)),
+            255,
+            thickness=-1,
+        )
+        mask = Image.fromarray(mask_np)
+        resized_mask = mask.resize((w, h), Image.NEAREST)
+        save_debug_image(resized_mask, "3_resized_mask", frame_num)
+
+    print("\n调试信息已保存到", output_dir)
+    print("请检查以下内容：")
+    print("1. *_1_ocr_box.png - OCR检测框是否准确覆盖字幕")
+    print("2. *_2_mask.png - 生成的mask是否完整覆盖字幕区域")
+    print("2. *_2_masked.png - mask覆盖的原图区域是否正确")
+    print("3. *_3_resized.png 和 *_3_resized_mask.png - STTN输入是否正确")
+
+
+if __name__ == "__main__":
+    import json
+    import argparse
+    
+    def load_test_data():
+        """加载测试数据"""
+        # 测试OCR结果
+        test_ocr_result = {}
+        for i in range(473, 499):
+            frame_key = f"3/{i:04d}.png,0"
+            test_ocr_result[frame_key] = {
+                "box": [451, 1418, 623, 1518],
+                "text": "什么"
+            }
+        return test_ocr_result
+
+    # 设置命令行参数
+    parser = argparse.ArgumentParser(description='调试字幕擦除')
+    parser.add_argument('--fps', type=float, default=30.0, help='视频帧率')
+    parser.add_argument('--output_dir', type=str, default='debug_output', help='调试输出目录')
+    parser.add_argument('--ocr_path', type=str, help='OCR结果JSON文件路径（可选）')
+    args = parser.parse_args()
+
+    # 配置信息
+    config = {
+        "erase": {
+            "mask_expand": 30,
+            "max_frame_length": 100,
+            "min_frame_length": 2,
+            "neighbor_stride": 10,
+            "ckpt_p": "./sttn/checkpoints/sttn.pth"
+        }
+    }
+
+    # 加载OCR结果
+    if args.ocr_path and os.path.exists(args.ocr_path):
+        print(f"从文件加载OCR结果: {args.ocr_path}")
+        with open(args.ocr_path, 'r', encoding='utf-8') as f:
+            ocr_result = json.load(f)
+    else:
+        print("使用测试OCR结果")
+        ocr_result = load_test_data()
+
+    # 测试帧范围
+    test_frames = list(range(473, 499))
+
+    print("\n=== 开始调试字幕擦除 ===")
+    print(f"测试帧范围: {test_frames[0]} - {test_frames[-1]}")
+    print(f"输出目录: {args.output_dir}")
+    
+    # 1. 调试OCR结果和mask生成
+    debug_subtitle_erase(
+        test_frames=test_frames,
+        ocr_result=ocr_result,
+        fps=args.fps,
+        config=config,
+        output_dir=args.output_dir
+    )
+    
+    # 2. 测试完整的擦除流程
+    print("\n=== 测试完整擦除流程 ===")
+    try:
+        # 创建一个只包含测试帧的OCR结果子集
+        test_ocr_result = {k: v for k, v in ocr_result.items() 
+                          if int(k.split('/')[1][:4]) in test_frames}
+        
+        # 执行擦除
+        remove_subtitles(
+            ocr_result=test_ocr_result,
+            fps=args.fps,
+            total_frames=len(test_frames),
+            config=config
+        )
+        print("擦除流程执行完成")
+        
+    except Exception as e:
+        print(f"擦除过程出错: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    print("\n=== 调试完成 ===")
+    print(f"请检查输出目录 {args.output_dir} 中的调试图像")
+    print("1. *_1_ocr_box.png - 显示OCR检测框")
+    print("2. *_2_mask.png - 显示生成的mask")
+    print("3. *_2_masked.png - 显示mask在原图上的覆盖区域")
+    print("4. *_3_resized.png 和 *_3_resized_mask.png - 显示STTN模型的输入")
+
+
