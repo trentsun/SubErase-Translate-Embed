@@ -94,11 +94,11 @@ def process_frame(value: tuple):
 
 
 def extract_mask(
-    mask_result: dict,
-    fps: int,
-    frame_len: int,
-    max_frame_length: int,
-    min_frame_length: int,
+    mask_result,
+    fps,
+    frame_len,
+    max_frame_length,
+    min_frame_length,
     mask_expand: int = 30,
 ):
     """修改提取掩码的逻辑，更好地处理短字幕"""
@@ -123,17 +123,16 @@ def extract_mask(
         width_ = image.size[0]
         mask = np.zeros(image.size[::-1], dtype="uint8")
         xmin, ymin, xmax, ymax = value["box"]
-        xwidth = min(xmin, width_ - xmax)
         
-        # 计算动态扩展值
+        # 修正掩码区域计算
         box_height = ymax - ymin
         dynamic_mask_expand = calculate_dynamic_mask_expand(box_height)
         
-        # 扩大掩码区域，确保完全覆盖字幕
+        # 直接使用检测到的坐标，不需要计算xwidth
         cv2.rectangle(
             mask,
-            (max(0, xwidth - dynamic_mask_expand), max(0, ymin - dynamic_mask_expand)),
-            (min(width_ - xwidth + dynamic_mask_expand, width_ - 1), min(ymax + dynamic_mask_expand, image.size[1] - 1)),
+            (max(0, xmin - dynamic_mask_expand), max(0, ymin - dynamic_mask_expand)),
+            (min(xmax + dynamic_mask_expand, width_ - 1), min(ymax + dynamic_mask_expand, image.size[1] - 1)),
             (255, 255, 255),
             thickness=-1,
         )
@@ -141,12 +140,10 @@ def extract_mask(
         
         # 修改帧组合逻辑
         if len(paths) == 0:
-            # 新建组
             paths = [frame_path]
             frames = [image]
             masks = [mask]
         elif frame_number - frame_number_pre <= int(fps * 1.5):  # 增加容忍度
-            # 添加到当前组
             paths.append(frame_path)
             frames.append(image)
             masks.append(mask)
