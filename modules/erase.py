@@ -18,7 +18,7 @@ def inpaint_video(
     frames_list: List[Image.Image],
     masks_list: List[Image.Image],
     neighbor_stride: int,
-    ckpt_p="./sttn/checkpoints/sttn.pth",
+    ckpt_p="./models/sttn.pth",
 ):
     """
     对视频帧进行修复。
@@ -374,7 +374,7 @@ if __name__ == "__main__":
             "max_frame_length": 100,
             "min_frame_length": 2,
             "neighbor_stride": 10,
-            "ckpt_p": "./sttn/checkpoints/sttn.pth"
+            "ckpt_p": "./models/sttn.pth"
         }
     }
 

@@ -53,7 +53,7 @@ def test_frame_range(center_frame=485, frame_range=100):
             "max_frame_length": 100,
             "min_frame_length": 2,
             "neighbor_stride": 5,  # 减小步长以获得更好的效果
-            "ckpt_p": "./sttn/checkpoints/sttn.pth"
+            "ckpt_p": "./models/sttn.pth"
         }
     }
     
