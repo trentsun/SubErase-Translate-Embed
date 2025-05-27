@@ -35,18 +35,16 @@ def inpaint_video(
     返回:
     - 修复后的视频帧图像路径列表。
     """
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    # build sttn model
-    model = build_sttn_model(ckpt_p, device)
+    # 构建模型时获取设备信息
+    model, device = build_sttn_model(ckpt_p)
 
     results = []
-
     for paths, frames, masks in tqdm(
         zip(paths_list, frames_list, masks_list),
         desc="Inpaint job",
         total=len(paths_list),
     ):
-        # inference
+        # 使用获取到的设备
         result = inpaint_video_with_builded_sttn(
             model, paths, frames, masks, neighbor_stride, device
         )

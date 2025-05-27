@@ -1,5 +1,6 @@
 import sys
 from typing import List
+import torch.cuda
 
 sys.path.insert(0, "./STTN")
 
@@ -37,22 +38,54 @@ def get_ref_index(neighbor_ids, length):
     return ref_index
 
 
-def build_sttn_model(ckpt_p: str, device="cuda"):
+def get_free_gpu():
+    """
+    获取当前最空闲的GPU
+    
+    返回:
+    - 最空闲GPU的设备ID，如果没有可用GPU则返回-1
+    """
+    if not torch.cuda.is_available():
+        return -1
+        
+    # 获取所有GPU的显存使用情况
+    gpu_memory = []
+    for i in range(torch.cuda.device_count()):
+        try:
+            memory_allocated = torch.cuda.memory_allocated(i)
+            memory_reserved = torch.cuda.memory_reserved(i)
+            gpu_memory.append((i, memory_allocated + memory_reserved))
+        except:
+            continue
+            
+    if not gpu_memory:
+        return -1
+        
+    # 选择显存占用最小的GPU
+    free_gpu = min(gpu_memory, key=lambda x: x[1])[0]
+    return free_gpu
+
+
+def build_sttn_model(ckpt_p: str, device=None):
     """
     构建并加载预训练参数到STTN模型中。
 
     参数:
     ckpt_p: str - 模型检查点文件的路径。
-    device: str - 模型推理所使用的设备，默认为"cuda"。
+    device: str - 模型推理所使用的设备，如果为None则自动选择。
 
     返回:
     model - 加载了预训练参数的STTN模型实例。
     """
+    if device is None:
+        gpu_id = get_free_gpu()
+        device = f"cuda:{gpu_id}" if gpu_id >= 0 else "cpu"
+    
     model = sttn.InpaintGenerator().to(device)
     data = torch.load(ckpt_p, map_location=device)
     model.load_state_dict(data["netG"])
     model.eval()
-    return model
+    return model, device
 
 
 @torch.no_grad()
