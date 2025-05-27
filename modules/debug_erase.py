@@ -32,7 +32,15 @@ def test_frame_range(center_frame=485, frame_range=100):
     test_ocr_result = {}
     # 在字幕实际出现的帧范围内添加OCR结果
     for i in range(473, 499):  # 原始字幕的帧范围
-        frame_key = f"3/{i:04d}.png,0"
+        # 注意这里的键值需要和实际文件路径分开处理
+        frame_key = f"3/{i:04d}.png,0"  # OCR结果的键值
+        frame_path = f"3/{i:04d}.png"    # 实际文件路径
+        
+        # 检查文件是否存在
+        if not os.path.exists(frame_path):
+            print(f"警告: 文件不存在 {frame_path}")
+            continue
+            
         test_ocr_result[frame_key] = {
             "box": [451, 1418, 623, 1518],
             "text": "什么"
@@ -68,6 +76,11 @@ def test_frame_range(center_frame=485, frame_range=100):
             if img is not None:
                 cv2.imwrite(os.path.join(output_dir, f"original_{frame_num:04d}.png"), img)
     
+    # 修改 extract_mask 函数的调用方式
+    def process_frame_path(frame_path_with_suffix):
+        """处理带后缀的帧路径"""
+        return frame_path_with_suffix.split(',')[0]
+    
     # 2. 执行调试流程
     print("\n2. 执行调试流程...")
     debug_subtitle_erase(
@@ -81,8 +94,15 @@ def test_frame_range(center_frame=485, frame_range=100):
     # 3. 执行完整擦除流程
     print("\n3. 执行完整擦除流程...")
     try:
+        # 创建一个处理后的OCR结果副本
+        processed_ocr_result = {}
+        for key, value in test_ocr_result.items():
+            # 移除文件路径中的后缀
+            new_key = process_frame_path(key)
+            processed_ocr_result[new_key] = value
+        
         remove_subtitles(
-            ocr_result=test_ocr_result,
+            ocr_result=processed_ocr_result,
             fps=30.0,
             total_frames=len(test_frames),
             config=config
@@ -91,8 +111,12 @@ def test_frame_range(center_frame=485, frame_range=100):
         
         # 4. 对比分析
         print("\n4. 进行对比分析...")
-        for frame_num in tqdm(range(473, 499)):  # 分析字幕帧
+        for frame_num in tqdm(range(473, 499)):
             frame_path = f"3/{frame_num:04d}.png"
+            if not os.path.exists(frame_path):
+                print(f"跳过不存在的帧: {frame_path}")
+                continue
+                
             original = cv2.imread(os.path.join(output_dir, f"original_{frame_num:04d}.png"))
             processed = cv2.imread(frame_path)
             
