@@ -43,22 +43,54 @@ def extract_subtitles(frame_paths: List[str], config: dict, fps: float):
 
     # 添加连续性检查
     min_subtitle_frames = int(fps * 0.5)  # 假设最短字幕持续0.5秒
+    frame_indices = list(range(len(frame_paths)))
     
-    # 检查孤立的未检测帧
-    for i in range(len(frame_paths)):
-        if i not in ocr_result:
+    # 第一遍：检查孤立的未检测帧
+    for i in frame_indices:
+        frame_path = frame_paths[i]
+        if frame_path not in ocr_result:
             # 检查前后是否都有检测结果
-            prev_detected = any(i - j in ocr_result for j in range(1, min_subtitle_frames))
-            next_detected = any(i + j in ocr_result for j in range(1, min_subtitle_frames))
+            prev_frames = [i - j for j in range(1, min_subtitle_frames) if i - j >= 0]
+            next_frames = [i + j for j in range(1, min_subtitle_frames) if i + j < len(frame_paths)]
+            
+            prev_detected = any(frame_paths[j] in ocr_result for j in prev_frames)
+            next_detected = any(frame_paths[j] in ocr_result for j in next_frames)
             
             if prev_detected and next_detected:
                 # 如果前后都有检测结果，则使用插值
-                prev_frame = max(k for k in ocr_result.keys() if k < i)
-                next_frame = min(k for k in ocr_result.keys() if k > i)
-                ocr_result[i] = {
-                    'text': ocr_result[prev_frame]['text'],
-                    'box': ocr_result[prev_frame]['box']  # 或者使用两帧box的平均值
-                }
+                prev_frame = max((k for k in prev_frames if frame_paths[k] in ocr_result), default=None)
+                next_frame = min((k for k in next_frames if frame_paths[k] in ocr_result), default=None)
+                
+                if prev_frame is not None and next_frame is not None:
+                    # 使用线性插值计算box位置
+                    prev_box = ocr_result[frame_paths[prev_frame]]['box']
+                    next_box = ocr_result[frame_paths[next_frame]]['box']
+                    ratio = (i - prev_frame) / (next_frame - prev_frame)
+                    
+                    interpolated_box = [
+                        int(prev_box[j] + (next_box[j] - prev_box[j]) * ratio)
+                        for j in range(4)
+                    ]
+                    
+                    ocr_result[frame_path] = {
+                        'text': ocr_result[frame_paths[prev_frame]]['text'],
+                        'box': interpolated_box
+                    }
+    
+    # 第二遍：检查可能的误检
+    frame_window = int(fps * 0.2)  # 200ms的时间窗口
+    for i in frame_indices:
+        frame_path = frame_paths[i]
+        if frame_path in ocr_result:
+            # 检查周围帧的检测结果
+            window_frames = [
+                j for j in range(max(0, i - frame_window), min(len(frame_paths), i + frame_window + 1))
+                if frame_paths[j] in ocr_result
+            ]
+            
+            if len(window_frames) < frame_window * 0.3:  # 如果时间窗口内检测到的帧太少
+                # 可能是误检，移除这个检测结果
+                del ocr_result[frame_path]
 
     return ocr_result, center
 

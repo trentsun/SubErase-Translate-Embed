@@ -101,36 +101,11 @@ def extract_mask(
     min_frame_length: int,
     mask_expand: int = 30,
 ):
-    """
-    根据掩膜结果提取连续帧的路径、图像和掩膜信息。
-
-    :param mask_result: 包含每帧文件路径和其对应掩膜信息的字典。
-    :param fps: 视频的帧率。
-    :param frame_len: 视频的帧长度。
-    :param max_frame_length: 最大帧长度。
-    :param min_frame_length: 最小帧长度。
-    :param mask_expand: 掩膜外扩的像素数。
-    :return: 一个包含三个列表的元组，分别包含每组连续帧的路径、图像和掩膜信息。
-    """
+    """修改提取掩码的逻辑，更好地处理短字幕"""
+    
     def calculate_dynamic_mask_expand(box_height):
-        # 根据字幕框高度动态计算扩展值
         return max(mask_expand, int(box_height * 0.5))
-
-    def add_frames():
-        end = frame_number
-        if frame_number_pre == frame_number:
-            end += min_frame_length
-        for i in range(frame_number_pre + 1, end):
-            if i > frame_len or i > frame_number_pre + min_frame_length:
-                break
-            frame_path_ = os.path.join(os.path.split(frame_path)[0], "%04d.png" % i)
-            image_ = load_img(frame_path_)
-            # 使用相邻帧的掩码，而不是空掩码
-            mask_ = masks[-1] if masks else Image.fromarray(np.zeros(image_.size[::-1], dtype="uint8"))
-            paths.append(frame_path_)
-            frames.append(image_)
-            masks.append(mask_)
-
+    
     paths_list = []
     frames_list = []
     masks_list = []
@@ -138,7 +113,11 @@ def extract_mask(
     frames = []
     masks = []
     frame_number_pre = 0
-    for frame_path, value in tqdm(mask_result.items(), desc="Find Mask"):
+    
+    # 按帧号排序处理
+    sorted_frames = sorted(mask_result.items(), key=lambda x: int(os.path.splitext(os.path.basename(x[0]))[0]))
+    
+    for frame_path, value in tqdm(sorted_frames, desc="Find Mask"):
         frame_number = int(os.path.splitext(os.path.basename(frame_path))[0])
         image = load_img(frame_path)
         width_ = image.size[0]
@@ -150,45 +129,45 @@ def extract_mask(
         box_height = ymax - ymin
         dynamic_mask_expand = calculate_dynamic_mask_expand(box_height)
         
+        # 扩大掩码区域，确保完全覆盖字幕
         cv2.rectangle(
             mask,
-            (max(0, xwidth - dynamic_mask_expand), ymin - dynamic_mask_expand),
-            (min(width_ - xwidth + dynamic_mask_expand, width_ - 1), ymax + dynamic_mask_expand),
+            (max(0, xwidth - dynamic_mask_expand), max(0, ymin - dynamic_mask_expand)),
+            (min(width_ - xwidth + dynamic_mask_expand, width_ - 1), min(ymax + dynamic_mask_expand, image.size[1] - 1)),
             (255, 255, 255),
             thickness=-1,
         )
         mask = Image.fromarray(mask)
-
-        # 降低帧间隔判断的严格性
-        if frame_number - frame_number_pre < fps * 3 and len(paths) < max_frame_length:  # 从 fps * 2 改为 fps * 3
+        
+        # 修改帧组合逻辑
+        if len(paths) == 0:
+            # 新建组
+            paths = [frame_path]
+            frames = [image]
+            masks = [mask]
+        elif frame_number - frame_number_pre <= int(fps * 1.5):  # 增加容忍度
+            # 添加到当前组
             paths.append(frame_path)
             frames.append(image)
             masks.append(mask)
         else:
-            if paths:
-                add_frames()
+            # 保存当前组并开始新组
+            if len(paths) >= max(2, int(fps * 0.1)):  # 允许更短的字幕组，但至少需要2帧
                 paths_list.append(paths)
                 frames_list.append(frames)
                 masks_list.append(masks)
             paths = [frame_path]
             frames = [image]
             masks = [mask]
+        
         frame_number_pre = frame_number
-
-    if paths:
-        add_frames()
+    
+    # 处理最后一组
+    if len(paths) >= max(2, int(fps * 0.1)):
         paths_list.append(paths)
         frames_list.append(frames)
         masks_list.append(masks)
-
-    if len(paths_list[-1]) < min_frame_length:
-        paths = paths_list.pop()
-        paths_list[-1].extend(paths)
-        frames = frames_list.pop()
-        frames_list[-1].extend(frames)
-        masks = masks_list.pop()
-        masks_list[-1].extend(masks)
-
+    
     return paths_list, frames_list, masks_list
 
 
